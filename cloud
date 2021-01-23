@@ -3,15 +3,22 @@
 
 import datetime
 import getpass
-import pathlib
+from pathlib import Path
 import os
 import socket
 import sys
 import datetime
 import glob
+import configparser
 
-CLOUDDATAPATH = pathlib.Path.home() / 'Cloud' / 'data'
-LOGFILEPATH = pathlib.Path.home() / 'Cloud' / 'sync_log' 
+home_dir = Path.home()
+config_file = home_dir / '.config' / 'cloud' / 'config.ini'
+
+config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+config.read(str(config_file))
+
+CLOUDDATAPATH = Path(config['CloudData']['CloudDataPath']
+LOGFILEPATH = Path(config['CloudData']['LogFilePath']
 LOGFILE = LOGFILEPATH / 'sync_log.txt'
 
 LOGFILEPATH.mkdir(parents=True, exist_ok=True)
@@ -24,9 +31,13 @@ def main():
     date = datetime.datetime.now()
 
     accounts = []
-    #                label           local directory                  remote directory
-    accounts.append(['box',         '~/Cloud/data/box_sync',          'box:sync'])
-    accounts.append(['googledrive', '~/Cloud/data/google_drive_sync', 'googledrive:sync'])
+    account_types = [i for i in config.keys() if i not in ['DEFAULT', 'CloudData']]
+    for account_type in account_types:
+        accounts.append([
+            config[account_type]['label'],
+            config[account_type]['local_directory'],
+            config[account_type]['remote_directory']
+        ])
 
     if len(sys.argv) == 2:
         action = sys.argv[1]
