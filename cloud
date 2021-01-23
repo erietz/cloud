@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+# cloud - sync local directory with cloud service using rclone
+
+import datetime
+import getpass
+import pathlib
+import os
+import socket
+import sys
+import datetime
+import glob
+
+CLOUDDATAPATH = pathlib.Path.home() / 'Cloud' / 'data'
+LOGFILEPATH = pathlib.Path.home() / 'Cloud' / 'sync_log' 
+LOGFILE = LOGFILEPATH / 'sync_log.txt'
+
+LOGFILEPATH.mkdir(parents=True, exist_ok=True)
+
+VERSION = '20210120'
+print()
+print(f'{sys.argv[0]} - version {VERSION}')
+
+def main():
+    date = datetime.datetime.now()
+
+    accounts = []
+    #                label           local directory                  remote directory
+    accounts.append(['box',         '~/Cloud/data/box_sync',          'box:sync'])
+    accounts.append(['googledrive', '~/Cloud/data/google_drive_sync', 'googledrive:sync'])
+
+    if len(sys.argv) == 2:
+        action = sys.argv[1]
+        if action == 'push' or action == 'pull':
+            perform(date, accounts, action)
+            update_log_file(date, action)
+        if action == 'status':
+            status(date)
+    else:
+        usage()
+    print()
+
+def perform(date, accounts, action):
+    label, local, remote  = 0, 1, 2
+    for i in range(len(accounts)):
+        header(accounts[i][label])
+        if action == 'push':
+            cmd = f'rclone sync {accounts[i][local]} {accounts[i][remote]} --progress'
+        if action == 'pull':
+            cmd = f'rclone sync {accounts[i][remote]} {accounts[i][local]} --progress'
+        os.system(cmd)
+
+def status(date):
+    header('cloud sync status')
+    os.system(f'rclone sync box:sync_log {LOGFILEPATH}')
+    tail_log_file()
+    header('local file status')
+    print('last push                                       newest local file')
+    print(f'{last_push_time():45} : {newest_file_time()}')
+    if newest_file_time() > last_push_time():
+        print()
+        print('push needed...')
+
+def update_log_file(date, action):
+    os.system(f'rclone sync box:sync_log {LOGFILEPATH}')
+    with open(LOGFILE, 'a') as logf:
+        actionstring = str(date)[:22] + ' '
+        actionstring += action + ' '
+        actionstring += getpass.getuser() + '@' + socket.gethostname() + ' '
+        newestfilestring = newest_file_time() 
+        logstring = f'{actionstring:45} : {newestfilestring}\n'
+        logf.write(logstring)
+    os.system(f'rclone sync {LOGFILEPATH} box:sync_log')
+    header('cloud sync status')
+    tail_log_file()
+
+def tail_log_file():
+    print(f'tail {LOGFILE}:')
+    print()
+    print('last action                                     newest local file @ last action')
+    with open(LOGFILE) as logf:
+        content = logf.read().splitlines()
+    count = len(content)
+    for i in range(count-5, count):
+        print(content[i])
+
+def last_push_time():
+    lastpushtime=''
+    with open(LOGFILE) as f:
+        content = f.readlines()
+    l = len(content)
+    for i in range(l):
+        words = content[l-1-i].split()
+        if words[2] == 'push':
+    
+            lastpushtime = words[0] + ' ' + words[1]
+            break
+    return lastpushtime
+
+def newest_file_time():
+    os.chdir(CLOUDDATAPATH)
+    gfiles = sorted(glob.glob(str(CLOUDDATAPATH / '**/*'), recursive = True), key=os.path.getmtime)    
+    newest = gfiles[-1]
+    newest_epoch_time = os.path.getmtime(newest)
+    newesttimeandname = formatted_time(newest_epoch_time) + ' ' + newest
+    return newesttimeandname
+
+def formatted_time(epoch_time):
+    ftime = datetime.datetime.fromtimestamp(epoch_time).strftime('%Y-%m-%d %H:%M:%S.%f')
+    return ftime[:22]
+
+def header(label):
+    print()
+    print(f'-- {label} --')
+
+def usage():
+    print()
+    print('usage:')
+    print('    cloud status')
+    print('    cloud push')
+    print('    cloud pull')
+    print()
+
+if __name__ == '__main__':
+    main()
+    
